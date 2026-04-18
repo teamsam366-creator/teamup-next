@@ -29,7 +29,7 @@ function TeamUpApp() {
   const [state, setState] = useState({
     users: [], accounts: [], tasks: [], sessions: [],
     settings: {globalRate:6}, paymentRecords: [], projects: [],
-    routeTab: 'accounts', adminTab: 'tasks', billingFilter: null
+    routeTab: 'accounts', adminTab: 'tasks'
   });
   const [authReady, setAuthReady] = useState(false);
 
@@ -312,7 +312,6 @@ function AdminTasksView({ state, setState }) {
   );
 }
 
-// ── Billing: Task-level operational view ──
 function AdminBillingView({ state, setState }) {
   const today = new Date().toISOString().slice(0,10);
   const wb = getWeekBounds(today);
@@ -419,87 +418,152 @@ function AdminBillingView({ state, setState }) {
   );
 }
 
-// ── Payments: User-level payout summary ──
+// ── Payments: User-level summary with batches ──
 function AdminPaymentsView({ state, setState }) {
-  const reviewedTasks = state.tasks.filter(t=>t.status==='reviewed');
-  const paidTasks = reviewedTasks.filter(t=>t.paid);
+  const today = new Date().toISOString().slice(0,10);
+  const [preset, setPreset] = useState('week');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [openBatch, setOpenBatch] = useState(null);
+  const [historyPage, setHistoryPage] = useState(1);
+  const PAGE_SIZE = 15;
 
+  // Date range based on preset
+  const getRange = () => {
+    const now = new Date(today+'T00:00:00Z');
+    if(preset==='week') {
+      const wb = getWeekBounds(today);
+      return {from: wb.start, to: wb.end};
+    }
+    if(preset==='month') {
+      const y=now.getUTCFullYear(), m=now.getUTCMonth();
+      const from=`${y}-${String(m+1).padStart(2,'0')}-01`;
+      const lastDay=new Date(Date.UTC(y,m+1,0)).getUTCDate();
+      const to=`${y}-${String(m+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+      return {from,to};
+    }
+    if(preset==='last30') {
+      const from=new Date(now.getTime()-29*86400000).toISOString().slice(0,10);
+      return {from, to:today};
+    }
+    return {from:customFrom, to:customTo};
+  };
+
+  const {from, to} = getRange();
+  const paidTasks = state.tasks.filter(t=>t.paid&&t.status==='reviewed');
+  const filteredPaid = paidTasks.filter(t=>within(t.workDate,from,to));
+
+  // Build user summary for selected period
   const userSummary = {};
-  reviewedTasks.forEach(t=>{
+  filteredPaid.forEach(t=>{
     const hrs=parseDuration(t.duration)/3600;
     const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};
     const revenue=hrs*(acc.accountRate||0);
     const payout=hrs*userRateForTask(t,state);
-    const profit=revenue-payout;
     const key=t.userId||t.userName;
     if(!userSummary[key]){
       const usr=state.users.find(u=>u.id===t.userId)||{};
-      userSummary[key]={userId:t.userId,userName:t.userName,binanceId:usr.binanceId||'—',totalTasks:0,paidTasks:0,totalRevenue:0,totalPayout:0,totalProfit:0,unpaidPayout:0};
+      userSummary[key]={userName:t.userName,binanceId:usr.binanceId||'—',tasks:0,revenue:0,payout:0,profit:0};
     }
-    userSummary[key].totalTasks++;
-    userSummary[key].totalRevenue+=revenue;
-    userSummary[key].totalPayout+=payout;
-    userSummary[key].totalProfit+=profit;
-    if(t.paid) userSummary[key].paidTasks++;
-    else userSummary[key].unpaidPayout+=payout;
+    userSummary[key].tasks++;
+    userSummary[key].revenue+=revenue;
+    userSummary[key].payout+=payout;
+    userSummary[key].profit+=(revenue-payout);
   });
   const userRows=Object.values(userSummary).sort((a,b)=>a.userName.localeCompare(b.userName));
 
-  const totalPaidUsers=userRows.filter(u=>u.unpaidPayout===0&&u.totalTasks>0).length;
-  const totalPaid=paidTasks.reduce((s,t)=>{const hrs=parseDuration(t.duration)/3600;return s+(hrs*userRateForTask(t,state));},0);
-  const totalRevenue=reviewedTasks.reduce((s,t)=>{const hrs=parseDuration(t.duration)/3600;const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};return s+(hrs*(acc.accountRate||0));},0);
-  const totalProfit=totalRevenue-userRows.reduce((s,u)=>s+u.totalPayout,0);
+  // Summary cards
+  const totalRevenue=filteredPaid.reduce((s,t)=>{const hrs=parseDuration(t.duration)/3600;const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};return s+(hrs*(acc.accountRate||0));},0);
+  const totalPayout=filteredPaid.reduce((s,t)=>{const hrs=parseDuration(t.duration)/3600;return s+(hrs*userRateForTask(t,state));},0);
+  const totalProfit=totalRevenue-totalPayout;
+
+  // Build weekly batches from ALL paid tasks
+  const batchMap = {};
+  paidTasks.forEach(t=>{
+    const wb=getWeekBounds(t.workDate);
+    const key=wb.start;
+    if(!batchMap[key]) batchMap[key]={from:wb.start,to:wb.end,tasks:[],revenue:0,payout:0,profit:0};
+    const hrs=parseDuration(t.duration)/3600;
+    const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};
+    const revenue=hrs*(acc.accountRate||0);
+    const payout=hrs*userRateForTask(t,state);
+    batchMap[key].tasks.push(t);
+    batchMap[key].revenue+=revenue;
+    batchMap[key].payout+=payout;
+    batchMap[key].profit+=(revenue-payout);
+  });
+  const batches=Object.values(batchMap).sort((a,b)=>b.from.localeCompare(a.from));
+
+  // History pagination
+  const sortedHistory=[...filteredPaid].sort((a,b)=>new Date(b.workDate)-new Date(a.workDate));
+  const totalPages=Math.ceil(sortedHistory.length/PAGE_SIZE);
+  const pagedHistory=sortedHistory.slice((historyPage-1)*PAGE_SIZE, historyPage*PAGE_SIZE);
 
   return (
     <div>
+      {/* Period Selector */}
+      <div className="card p20 mb16">
+        <div className="row" style={{gap:8,flexWrap:'wrap',alignItems:'center'}}>
+          <span style={{fontWeight:600,fontSize:14,color:'#1a2332'}}>Period:</span>
+          {[['week','This Week'],['month','This Month'],['last30','Last 30 Days'],['custom','Custom']].map(([val,label])=>(
+            <button key={val} className={`btn ${preset===val?'btn-primary':'btn-soft'}`} style={{minHeight:34,padding:'6px 14px',fontSize:13}} onClick={()=>{setPreset(val);setHistoryPage(1);}}>
+              {label}
+            </button>
+          ))}
+          {preset==='custom' && (
+            <>
+              <input className="input" type="date" value={customFrom} onChange={e=>{setCustomFrom(e.target.value);setHistoryPage(1);}} style={{width:150}} />
+              <span style={{color:'#8492a6'}}>→</span>
+              <input className="input" type="date" value={customTo} onChange={e=>{setCustomTo(e.target.value);setHistoryPage(1);}} style={{width:150}} />
+            </>
+          )}
+          {from&&to&&<span className="badge b-blue">{fmtDate(from)} → {fmtDate(to)}</span>}
+        </div>
+      </div>
+
+      {/* Summary Cards */}
       <div className="grid grid-4 mb16">
-        <div className="stat"><div className="v" style={{color:'#059669'}}>{totalPaidUsers}</div><div className="l">Users Fully Paid</div></div>
-        <div className="stat"><div className="v" style={{color:'#059669'}}>${totalPaid.toFixed(2)}</div><div className="l">Total Paid Out</div></div>
+        <div className="stat"><div className="v" style={{color:'#059669'}}>{filteredPaid.length}</div><div className="l">Paid Tasks</div></div>
         <div className="stat"><div className="v" style={{color:'#0b6aa9'}}>${totalRevenue.toFixed(2)}</div><div className="l">Total Revenue</div></div>
+        <div className="stat"><div className="v" style={{color:'#059669'}}>${totalPayout.toFixed(2)}</div><div className="l">Total Payout</div></div>
         <div className="stat"><div className="v" style={{color:'#7c3aed'}}>${totalProfit.toFixed(2)}</div><div className="l">Total Profit</div></div>
       </div>
 
+      {/* User Summary */}
       <div className="card p20 mb16">
-        <div className="section-title">Payments — User Summary</div>
-        <div className="small mb16" style={{color:'#8492a6'}}>Overview of each user's earnings and payment status</div>
+        <div className="section-title">Summary by User</div>
+        <div className="small mb16" style={{color:'#8492a6'}}>Paid tasks within the selected period</div>
         <div className="table-wrap">
           <table className="table">
             <thead>
               <tr>
                 <th>User</th><th>Binance ID</th><th>Tasks</th>
-                <th style={{color:'#0b6aa9'}}>Total Revenue</th>
-                <th style={{color:'#059669'}}>Total Payout</th>
-                <th style={{color:'#7c3aed'}}>Total Profit</th>
-                <th style={{color:'#dc2626'}}>Unpaid Amount</th>
-                <th>Status</th>
+                <th style={{color:'#0b6aa9'}}>Revenue</th>
+                <th style={{color:'#059669'}}>Payout</th>
+                <th style={{color:'#7c3aed'}}>Profit</th>
               </tr>
             </thead>
             <tbody>
-              {!userRows.length && <tr><td colSpan="8" className="empty">No reviewed tasks yet</td></tr>}
+              {!userRows.length&&<tr><td colSpan="6" className="empty">No paid tasks in this period</td></tr>}
               {userRows.map(u=>(
-                <tr key={u.userId||u.userName}>
+                <tr key={u.userName}>
                   <td><strong>{u.userName}</strong></td>
                   <td className="mono">{u.binanceId}</td>
-                  <td>{u.paidTasks}/{u.totalTasks} paid</td>
-                  <td style={{color:'#0b6aa9',fontWeight:700}}>${u.totalRevenue.toFixed(2)}</td>
-                  <td style={{color:'#059669',fontWeight:700}}>${u.totalPayout.toFixed(2)}</td>
-                  <td style={{color:'#7c3aed',fontWeight:700}}>${u.totalProfit.toFixed(2)}</td>
-                  <td style={{color:u.unpaidPayout>0?'#dc2626':'#059669',fontWeight:700}}>
-                    {u.unpaidPayout>0?`$${u.unpaidPayout.toFixed(2)}`:'✓ Clear'}
-                  </td>
-                  <td>{u.unpaidPayout===0?<span className="badge b-green">Fully Paid</span>:<span className="badge b-red">Has Pending</span>}</td>
+                  <td>{u.tasks}</td>
+                  <td style={{color:'#0b6aa9',fontWeight:700}}>${u.revenue.toFixed(2)}</td>
+                  <td style={{color:'#059669',fontWeight:700}}>${u.payout.toFixed(2)}</td>
+                  <td style={{color:'#7c3aed',fontWeight:700}}>${u.profit.toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
             {userRows.length>0&&(
               <tfoot>
                 <tr style={{background:'#f8fafc',fontWeight:700}}>
-                  <td colSpan="3"><strong>Total</strong></td>
-                  <td style={{color:'#0b6aa9'}}><strong>${userRows.reduce((s,u)=>s+u.totalRevenue,0).toFixed(2)}</strong></td>
-                  <td style={{color:'#059669'}}><strong>${userRows.reduce((s,u)=>s+u.totalPayout,0).toFixed(2)}</strong></td>
-                  <td style={{color:'#7c3aed'}}><strong>${userRows.reduce((s,u)=>s+u.totalProfit,0).toFixed(2)}</strong></td>
-                  <td style={{color:'#dc2626'}}><strong>${userRows.reduce((s,u)=>s+u.unpaidPayout,0).toFixed(2)}</strong></td>
-                  <td></td>
+                  <td colSpan="2"><strong>Total</strong></td>
+                  <td><strong>{filteredPaid.length}</strong></td>
+                  <td style={{color:'#0b6aa9'}}><strong>${totalRevenue.toFixed(2)}</strong></td>
+                  <td style={{color:'#059669'}}><strong>${totalPayout.toFixed(2)}</strong></td>
+                  <td style={{color:'#7c3aed'}}><strong>${totalProfit.toFixed(2)}</strong></td>
                 </tr>
               </tfoot>
             )}
@@ -507,9 +571,63 @@ function AdminPaymentsView({ state, setState }) {
         </div>
       </div>
 
+      {/* Payment Batches */}
+      <div className="card p20 mb16">
+        <div className="section-title">Payment Batches — All Time</div>
+        <div className="small mb16" style={{color:'#8492a6'}}>Weekly settlement cycles — click to expand</div>
+        {!batches.length&&<div className="empty">No paid tasks yet</div>}
+        {batches.map(batch=>(
+          <div key={batch.from} style={{border:'1px solid var(--line)',borderRadius:10,marginBottom:10,overflow:'hidden'}}>
+            <div
+              style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 16px',background:'#f8fafc',cursor:'pointer'}}
+              onClick={()=>setOpenBatch(openBatch===batch.from?null:batch.from)}
+            >
+              <div style={{display:'flex',alignItems:'center',gap:12}}>
+                <span style={{fontWeight:700,fontSize:14}}>{fmtDate(batch.from)} → {fmtDate(batch.to)}</span>
+                <span className="badge">{batch.tasks.length} tasks</span>
+              </div>
+              <div style={{display:'flex',gap:16,alignItems:'center'}}>
+                <span style={{color:'#0b6aa9',fontWeight:600,fontSize:13}}>Rev: ${batch.revenue.toFixed(2)}</span>
+                <span style={{color:'#059669',fontWeight:600,fontSize:13}}>Pay: ${batch.payout.toFixed(2)}</span>
+                <span style={{color:'#7c3aed',fontWeight:600,fontSize:13}}>Profit: ${batch.profit.toFixed(2)}</span>
+                <span style={{color:'#8492a6',fontSize:18}}>{openBatch===batch.from?'▲':'▼'}</span>
+              </div>
+            </div>
+            {openBatch===batch.from&&(
+              <div className="table-wrap">
+                <table className="table">
+                  <thead><tr><th>Date</th><th>User</th><th>Account</th><th>Project</th><th>Duration</th><th style={{color:'#0b6aa9'}}>Revenue</th><th style={{color:'#059669'}}>Payout</th><th style={{color:'#7c3aed'}}>Profit</th></tr></thead>
+                  <tbody>
+                    {batch.tasks.sort((a,b)=>new Date(b.workDate)-new Date(a.workDate)).map(t=>{
+                      const secs=parseDuration(t.duration);const hrs=secs/3600;
+                      const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};
+                      const revenue=hrs*(acc.accountRate||0);
+                      const payout=hrs*userRateForTask(t,state);
+                      return(
+                        <tr key={t.id}>
+                          <td><strong>{fmtDate(t.workDate)}</strong></td>
+                          <td>{t.userName}</td>
+                          <td>{t.account}</td>
+                          <td>{t.projectName||'—'}</td>
+                          <td className="mono">{fmtDuration(secs)}</td>
+                          <td style={{color:'#0b6aa9',fontWeight:700}}>${revenue.toFixed(2)}</td>
+                          <td style={{color:'#059669',fontWeight:700}}>${payout.toFixed(2)}</td>
+                          <td style={{color:'#7c3aed',fontWeight:700}}>${(revenue-payout).toFixed(2)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* History with Pagination */}
       <div className="card p20">
         <div className="section-title">Paid Tasks History</div>
-        <div className="small mb16" style={{color:'#8492a6'}}>All tasks marked as paid</div>
+        <div className="small mb16" style={{color:'#8492a6'}}>Detailed list for the selected period — {sortedHistory.length} tasks total</div>
         <div className="table-wrap">
           <table className="table">
             <thead>
@@ -521,8 +639,8 @@ function AdminPaymentsView({ state, setState }) {
               </tr>
             </thead>
             <tbody>
-              {!paidTasks.length&&<tr><td colSpan="9" className="empty">No paid tasks yet</td></tr>}
-              {[...paidTasks].sort((a,b)=>new Date(b.submittedAt)-new Date(a.submittedAt)).map(t=>{
+              {!pagedHistory.length&&<tr><td colSpan="9" className="empty">No paid tasks in this period</td></tr>}
+              {pagedHistory.map(t=>{
                 const secs=parseDuration(t.duration);const hrs=secs/3600;
                 const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};
                 const revenue=hrs*(acc.accountRate||0);
@@ -545,6 +663,13 @@ function AdminPaymentsView({ state, setState }) {
             </tbody>
           </table>
         </div>
+        {totalPages>1&&(
+          <div className="row mt16" style={{justifyContent:'center',gap:8}}>
+            <button className="btn btn-soft" disabled={historyPage===1} onClick={()=>setHistoryPage(p=>p-1)}>← Prev</button>
+            <span style={{padding:'8px 16px',fontSize:14,color:'#8492a6'}}>Page {historyPage} of {totalPages}</span>
+            <button className="btn btn-soft" disabled={historyPage===totalPages} onClick={()=>setHistoryPage(p=>p+1)}>Next →</button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -607,9 +732,7 @@ function AdminUsersView({ state, setState }) {
           <thead><tr><th>Name</th><th>Email</th><th>Binance ID</th><th>Action</th></tr></thead>
           <tbody>
             {!state.users.length&&<tr><td colSpan="4" className="empty">No users</td></tr>}
-            {state.users.map(u=>(
-              <tr key={u.id}><td><strong>{u.name}</strong></td><td>{u.email}</td><td className="mono">{u.binanceId||'—'}</td><td><button className="btn btn-soft" onClick={()=>setModal(u)}>Edit</button></td></tr>
-            ))}
+            {state.users.map(u=>(<tr key={u.id}><td><strong>{u.name}</strong></td><td>{u.email}</td><td className="mono">{u.binanceId||'—'}</td><td><button className="btn btn-soft" onClick={()=>setModal(u)}>Edit</button></td></tr>))}
           </tbody>
         </table>
       </div>
@@ -661,7 +784,7 @@ function TaskModal({ task, user, state, setState, onClose }) {
     const payload={workDate:form.workDate,platform:form.platform,duration,payType:'task',projectName:form.projectName,account:form.account,notes:form.notes};
     try{
       if(isEdit){await updateDoc(doc(db,'tasks',task.id),{...payload,status:'pending',reviewNote:''});setState(prev=>({...prev,tasks:prev.tasks.map(t=>t.id===task.id?{...t,...payload,status:'pending',reviewNote:''}:t)}));}
-      else{const addTaskFn=httpsCallable(functions,'addTask');await addTaskFn(payload);}
+      else{const fn=httpsCallable(functions,'addTask');await fn(payload);}
       onClose();
     }catch(e){alert('Error: '+(e.message||'Unknown'));}
   };
@@ -717,7 +840,7 @@ function AccountModal({ account, state, setState, onClose }) {
   const isEdit=!!account;
   const [form, setForm]=useState({number:account?.number||'',project:account?.project||'',anydeskId:account?.anydeskId||'',anydeskPass:account?.anydeskPass||'',accountRate:account?.accountRate||10,maxHours:account?.maxHours||10,accountStatus:account?.accountStatus||'active',adminNotes:account?.adminNotes||'',visibleToUserIds:account?.visibleToUserIds||[]});
   const save=async()=>{
-    if(!form.number||!form.anydeskId||!form.anydeskPass) return alert('Account number, ID and password are required');
+    if(!form.number||!form.anydeskId||!form.anydeskPass) return alert('Required fields missing');
     const id=isEdit?account.id:'id_'+Math.random().toString(36).slice(2,10);
     const checkedUsers=state.users.filter(u=>form.visibleToUserIds.includes(u.id));
     const data={...form,id,visibleToUserNames:checkedUsers.map(u=>u.name),visibleToUserEmails:checkedUsers.map(u=>u.email)};
@@ -739,9 +862,7 @@ function AccountModal({ account, state, setState, onClose }) {
           <div className="field"><label className="label">Status</label><select className="select" value={form.accountStatus} onChange={e=>setForm({...form,accountStatus:e.target.value})}><option value="active">Working</option><option value="paused">Stopped</option></select></div>
         </div>
         <div className="field mt16"><label className="label">Assigned To Users</label>
-          <div className="check-grid">
-            {state.users.map(u=>(<label key={u.id} className="check-item"><input type="checkbox" checked={form.visibleToUserIds.includes(u.id)} onChange={e=>setForm({...form,visibleToUserIds:e.target.checked?[...form.visibleToUserIds,u.id]:form.visibleToUserIds.filter(id=>id!==u.id)})} /> {u.name}</label>))}
-          </div>
+          <div className="check-grid">{state.users.map(u=>(<label key={u.id} className="check-item"><input type="checkbox" checked={form.visibleToUserIds.includes(u.id)} onChange={e=>setForm({...form,visibleToUserIds:e.target.checked?[...form.visibleToUserIds,u.id]:form.visibleToUserIds.filter(id=>id!==u.id)})} /> {u.name}</label>))}</div>
         </div>
         <div className="field mt16"><label className="label">Admin Notes</label><textarea className="textarea" value={form.adminNotes} onChange={e=>setForm({...form,adminNotes:e.target.value})}></textarea></div>
         <div className="row mt16"><button className="btn btn-primary" onClick={save}>Save</button></div>
@@ -832,6 +953,6 @@ function exportToPDF(filtered,f,state){
   const totalRevenue=filtered.reduce((s,t)=>{const hrs=parseDuration(t.duration)/3600;const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};return s+(hrs*(acc.accountRate||0));},0);
   const totalPayout=filtered.reduce((s,t)=>{const hrs=parseDuration(t.duration)/3600;return s+(hrs*userRateForTask(t,state));},0);
   const rows=filtered.map(t=>{const secs=parseDuration(t.duration);const hrs=secs/3600;const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};const payout=hrs*userRateForTask(t,state);const revenue=hrs*(acc.accountRate||0);return`<tr><td>${fmtDate(t.workDate)}</td><td>${t.userName}</td><td>${t.account}</td><td>${t.projectName||'—'}</td><td>${fmtDuration(secs)}</td><td>$${revenue.toFixed(2)}</td><td>$${payout.toFixed(2)}</td><td>$${(revenue-payout).toFixed(2)}</td></tr>`;}).join('');
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>TeamUP Billing</title><style>body{font-family:Arial,sans-serif;padding:20px;color:#1a2332}table{width:100%;border-collapse:collapse;font-size:13px}th{background:#f8fafc;padding:10px 8px;text-align:left;border-bottom:2px solid #e4e9f0;font-weight:600}td{padding:10px 8px;border-bottom:1px solid #f1f5f9}.total{margin-top:20px;text-align:right}@media print{button{display:none}}</style></head><body><h1>TeamUP — Billing Report</h1><p>Period: ${f.from||'All'} → ${f.to||'All'}</p><table><thead><tr><th>Date</th><th>User</th><th>Account</th><th>Project</th><th>Duration</th><th>Revenue $</th><th>Payout $</th><th>Profit $</th></tr></thead><tbody>${rows}</tbody></table><div class="total">Revenue: <strong>$${totalRevenue.toFixed(2)}</strong> &nbsp; Payout: <strong>$${totalPayout.toFixed(2)}</strong> &nbsp; Profit: <strong>$${(totalRevenue-totalPayout).toFixed(2)}</strong></div><br><button onclick="window.print()" style="padding:10px 20px;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer">Print / Save as PDF</button></body></html>`);
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>TeamUP Billing</title><style>body{font-family:Arial,sans-serif;padding:20px}table{width:100%;border-collapse:collapse;font-size:13px}th{background:#f8fafc;padding:10px 8px;text-align:left;border-bottom:2px solid #e4e9f0;font-weight:600}td{padding:10px 8px;border-bottom:1px solid #f1f5f9}.total{margin-top:20px;text-align:right}@media print{button{display:none}}</style></head><body><h1>TeamUP Billing</h1><p>${f.from||'All'} → ${f.to||'All'}</p><table><thead><tr><th>Date</th><th>User</th><th>Account</th><th>Project</th><th>Duration</th><th>Revenue</th><th>Payout</th><th>Profit</th></tr></thead><tbody>${rows}</tbody></table><div class="total">Revenue: <strong>$${totalRevenue.toFixed(2)}</strong> &nbsp; Payout: <strong>$${totalPayout.toFixed(2)}</strong> &nbsp; Profit: <strong>$${(totalRevenue-totalPayout).toFixed(2)}</strong></div><br><button onclick="window.print()">Print / PDF</button></body></html>`);
   win.document.close();
 }

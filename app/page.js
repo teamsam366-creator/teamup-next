@@ -408,57 +408,13 @@ function AdminBillingView({ state, setState }) {
 
 // ── Admin Payments ──
 function AdminPaymentsView({ state, setState }) {
-  const today = new Date().toISOString().slice(0,10);
-  const [preset, setPreset] = useState('week');
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
-
-  const getRange = () => {
-    const now = new Date(today+'T00:00:00Z');
-    if (preset==='week') { const wb=getWeekBounds(today); return {from:wb.start,to:wb.end}; }
-    if (preset==='month') {
-      const y=now.getUTCFullYear(),m=now.getUTCMonth();
-      const from=`${y}-${String(m+1).padStart(2,'0')}-01`;
-      const lastDay=new Date(Date.UTC(y,m+1,0)).getUTCDate();
-      return {from,to:`${y}-${String(m+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`};
-    }
-    if (preset==='last30') return {from:new Date(now.getTime()-29*86400000).toISOString().slice(0,10),to:today};
-    return {from:customFrom,to:customTo};
-  };
-
-  const {from,to} = getRange();
-
-  // Paid tasks filtered by period for Summary by User
-  const paidInPeriod = useMemo(() => {
-    return state.tasks.filter(t=>t.paid&&t.status==='reviewed'&&within(t.workDate,from,to));
-  }, [state.tasks, from, to]);
+  const [openBatch, setOpenBatch] = useState(null);
 
   // All paid tasks for Payment Batches (all time)
   const allPaidTasks = useMemo(() => {
     return state.tasks.filter(t=>t.paid&&t.status==='reviewed')
       .sort((a,b)=>new Date(b.submittedAt)-new Date(a.submittedAt));
   }, [state.tasks]);
-
-  // Summary by User (filtered by period)
-  const byUser = useMemo(() => {
-    const map = {};
-    paidInPeriod.forEach(t => {
-      const hrs=parseDuration(t.duration)/3600;
-      const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};
-      const revenue=hrs*Number(acc.accountRate||0);
-      const payout=hrs*userRateForTask(t,state);
-      const profit=revenue-payout;
-      if (!map[t.userId]) {
-        const usr=state.users.find(u=>u.id===t.userId)||{};
-        map[t.userId]={userId:t.userId,userName:t.userName,binanceId:usr.binanceId||'—',tasksCount:0,revenue:0,payout:0,profit:0};
-      }
-      map[t.userId].tasksCount++;
-      map[t.userId].revenue+=revenue;
-      map[t.userId].payout+=payout;
-      map[t.userId].profit+=profit;
-    });
-    return Object.values(map).sort((a,b)=>a.userName.localeCompare(b.userName));
-  }, [paidInPeriod, state]);
 
   // Payment Batches (all time)
   const batchRows = useMemo(() => {
@@ -469,84 +425,29 @@ function AdminPaymentsView({ state, setState }) {
       const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};
       const revenue=hrs*Number(acc.accountRate||0);
       const payout=hrs*userRateForTask(t,state);
-      if (!map[wb.start]) map[wb.start]={start:wb.start,end:wb.end,tasksCount:0,revenue:0,payout:0,profit:0};
+      if (!map[wb.start]) map[wb.start]={start:wb.start,end:wb.end,tasksCount:0,revenue:0,payout:0,profit:0,tasks:[]};
       map[wb.start].tasksCount++;
       map[wb.start].revenue+=revenue;
       map[wb.start].payout+=payout;
       map[wb.start].profit+=(revenue-payout);
+      map[wb.start].tasks.push(t);
     });
     return Object.values(map).sort((a,b)=>new Date(b.start)-new Date(a.start));
   }, [allPaidTasks, state]);
 
-  // Cards from period
-  const totalRevenue = byUser.reduce((s,u)=>s+u.revenue,0);
-  const totalPayout = byUser.reduce((s,u)=>s+u.payout,0);
-  const totalProfit = byUser.reduce((s,u)=>s+u.profit,0);
+  // Cards totals — all time
+  const totalRevenue = batchRows.reduce((s,b)=>s+b.revenue,0);
+  const totalPayout = batchRows.reduce((s,b)=>s+b.payout,0);
+  const totalProfit = batchRows.reduce((s,b)=>s+b.profit,0);
 
   return (
     <div>
-      {/* Period Filter */}
-      <div className="card p20 mb16">
-        <div className="row" style={{gap:8,flexWrap:'wrap',alignItems:'center'}}>
-          <span style={{fontWeight:600,fontSize:14,color:'#1a2332'}}>Period:</span>
-          {[['week','This Week'],['month','This Month'],['last30','Last 30 Days'],['custom','Custom']].map(([val,label])=>(
-            <button key={val} className={`btn ${preset===val?'btn-primary':'btn-soft'}`} style={{minHeight:34,padding:'6px 14px',fontSize:13}} onClick={()=>setPreset(val)}>
-              {label}
-            </button>
-          ))}
-          {preset==='custom' && (
-            <>
-              <input className="input" type="date" value={customFrom} onChange={e=>setCustomFrom(e.target.value)} style={{width:150}} />
-              <span style={{color:'#8492a6'}}>→</span>
-              <input className="input" type="date" value={customTo} onChange={e=>setCustomTo(e.target.value)} style={{width:150}} />
-            </>
-          )}
-          {from&&to&&<span className="badge b-blue">{fmtDate(from)} → {fmtDate(to)}</span>}
-        </div>
-      </div>
-
       {/* Summary Cards */}
       <div className="grid grid-4 mb16">
-        <div className="stat"><div className="v" style={{color:'#1a2332'}}>{paidInPeriod.length}</div><div className="l">Paid Tasks</div></div>
+        <div className="stat"><div className="v" style={{color:'#1a2332'}}>{allPaidTasks.length}</div><div className="l">Paid Tasks</div></div>
         <div className="stat"><div className="v" style={{color:'#0b6aa9'}}>${totalRevenue.toFixed(2)}</div><div className="l">Total Revenue</div></div>
         <div className="stat"><div className="v" style={{color:'#d97706'}}>${totalPayout.toFixed(2)}</div><div className="l">Total Payout</div></div>
         <div className="stat"><div className="v" style={{color:'#059669'}}>${totalProfit.toFixed(2)}</div><div className="l">Total Profit</div></div>
-      </div>
-
-      {/* Summary by User */}
-      <div className="card p20 mb16">
-        <div className="section-title">Summary by User</div>
-        <div className="small mb16" style={{color:'#8492a6'}}>Paid tasks grouped by user — within selected period</div>
-        {!byUser.length
-          ? <div className="empty">No paid tasks in this period</div>
-          : (
-          <div className="table-wrap">
-            <table className="table">
-              <thead><tr><th>User</th><th>Binance ID</th><th>Tasks</th><th style={{color:'#0b6aa9'}}>Revenue</th><th style={{color:'#d97706'}}>Payout</th><th style={{color:'#059669'}}>Profit</th></tr></thead>
-              <tbody>
-                {byUser.map(u=>(
-                  <tr key={u.userId||u.userName}>
-                    <td><strong>{u.userName}</strong></td>
-                    <td className="mono">{u.binanceId}</td>
-                    <td>{u.tasksCount}</td>
-                    <td style={{color:'#0b6aa9',fontWeight:700}}>${u.revenue.toFixed(2)}</td>
-                    <td style={{color:'#d97706',fontWeight:700}}>${u.payout.toFixed(2)}</td>
-                    <td style={{color:'#059669',fontWeight:700}}>${u.profit.toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr style={{background:'#f8fafc',fontWeight:700}}>
-                  <td colSpan="2"><strong>Total</strong></td>
-                  <td><strong>{paidInPeriod.length}</strong></td>
-                  <td style={{color:'#0b6aa9'}}><strong>${totalRevenue.toFixed(2)}</strong></td>
-                  <td style={{color:'#d97706'}}><strong>${totalPayout.toFixed(2)}</strong></td>
-                  <td style={{color:'#059669'}}><strong>${totalProfit.toFixed(2)}</strong></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
       </div>
 
       {/* Payment Batches — All Time */}
@@ -558,25 +459,43 @@ function AdminPaymentsView({ state, setState }) {
           : (
           <div style={{display:'flex',flexDirection:'column',gap:10}}>
             {batchRows.map(batch=>(
-              <div key={batch.start} style={{display:'flex',flexDirection:'row',justifyContent:'space-between',alignItems:'center',border:'1px solid var(--line)',borderRadius:10,padding:'14px 18px',flexWrap:'wrap',gap:12}}>
-                <div>
-                  <div style={{fontWeight:700,fontSize:14}}>{fmtDate(batch.start)} → {fmtDate(batch.end)}</div>
-                  <div className="small">{batch.tasksCount} paid task{batch.tasksCount!==1?'s':''}</div>
+              <div key={batch.start} style={{border:'1px solid var(--line)',borderRadius:10,overflow:'hidden'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'14px 18px',flexWrap:'wrap',gap:12,cursor:'pointer',background:openBatch===batch.start?'#f8fafc':'#fff'}} onClick={()=>setOpenBatch(openBatch===batch.start?null:batch.start)}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:14}}>{fmtDate(batch.start)} → {fmtDate(batch.end)}</div>
+                    <div className="small">{batch.tasksCount} paid task{batch.tasksCount!==1?'s':''}</div>
+                  </div>
+                  <div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'center'}}>
+                    <div style={{background:'#eff6ff',borderRadius:8,padding:'6px 14px',textAlign:'center'}}>
+                      <div style={{fontSize:11,color:'#8492a6'}}>Revenue</div>
+                      <div style={{fontWeight:700,color:'#0b6aa9'}}>${batch.revenue.toFixed(2)}</div>
+                    </div>
+                    <div style={{background:'#fffbeb',borderRadius:8,padding:'6px 14px',textAlign:'center'}}>
+                      <div style={{fontSize:11,color:'#8492a6'}}>Payout</div>
+                      <div style={{fontWeight:700,color:'#d97706'}}>${batch.payout.toFixed(2)}</div>
+                    </div>
+                    <div style={{background:'#ecfdf5',borderRadius:8,padding:'6px 14px',textAlign:'center'}}>
+                      <div style={{fontSize:11,color:'#8492a6'}}>Profit</div>
+                      <div style={{fontWeight:700,color:'#059669'}}>${batch.profit.toFixed(2)}</div>
+                    </div>
+                    <span style={{color:'#8492a6',fontSize:18}}>{openBatch===batch.start?'▲':'▼'}</span>
+                  </div>
                 </div>
-                <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
-                  <div style={{background:'#eff6ff',borderRadius:8,padding:'6px 14px',textAlign:'center'}}>
-                    <div style={{fontSize:11,color:'#8492a6'}}>Revenue</div>
-                    <div style={{fontWeight:700,color:'#0b6aa9'}}>${batch.revenue.toFixed(2)}</div>
+                {openBatch===batch.start&&(
+                  <div className="table-wrap">
+                    <table className="table">
+                      <thead><tr><th>Date</th><th>User</th><th>Account</th><th>Project</th><th>Duration</th><th style={{color:'#0b6aa9'}}>Revenue</th><th style={{color:'#d97706'}}>Payout</th><th style={{color:'#059669'}}>Profit</th></tr></thead>
+                      <tbody>
+                        {batch.tasks.sort((a,b)=>new Date(b.workDate)-new Date(a.workDate)).map(t=>{
+                          const secs=parseDuration(t.duration);const hrs=secs/3600;
+                          const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};
+                          const revenue=hrs*(acc.accountRate||0);const payout=hrs*userRateForTask(t,state);
+                          return(<tr key={t.id}><td><strong>{fmtDate(t.workDate)}</strong></td><td>{t.userName}</td><td>{t.account}</td><td>{t.projectName||'—'}</td><td className="mono">{fmtDuration(secs)}</td><td style={{color:'#0b6aa9',fontWeight:700}}>${revenue.toFixed(2)}</td><td style={{color:'#d97706',fontWeight:700}}>${payout.toFixed(2)}</td><td style={{color:'#059669',fontWeight:700}}>${(revenue-payout).toFixed(2)}</td></tr>);
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                  <div style={{background:'#fffbeb',borderRadius:8,padding:'6px 14px',textAlign:'center'}}>
-                    <div style={{fontSize:11,color:'#8492a6'}}>Payout</div>
-                    <div style={{fontWeight:700,color:'#d97706'}}>${batch.payout.toFixed(2)}</div>
-                  </div>
-                  <div style={{background:'#ecfdf5',borderRadius:8,padding:'6px 14px',textAlign:'center'}}>
-                    <div style={{fontSize:11,color:'#8492a6'}}>Profit</div>
-                    <div style={{fontWeight:700,color:'#059669'}}>${batch.profit.toFixed(2)}</div>
-                  </div>
-                </div>
+                )}
               </div>
             ))}
           </div>

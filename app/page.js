@@ -59,10 +59,10 @@ function LoadingScreen() {
   );
 }
 
-function LoginView({ error = '' }) {
+function LoginView() {
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
-  const [err, setErr] = useState(error);
+  const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
   const [remember, setRemember] = useState(false);
 
@@ -326,7 +326,6 @@ function AdminBillingView({ state, setState }) {
     (f.account==='all'||t.account===f.account)
   );
   const dailyRows = [...reviewedTasks].sort((a,b)=>new Date(b.submittedAt)-new Date(a.submittedAt));
-
   const totalRevenue = dailyRows.reduce((s,t)=>{const hrs=parseDuration(t.duration)/3600;const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};return s+(hrs*(acc.accountRate||0));},0);
   const totalPayout = dailyRows.reduce((s,t)=>{const hrs=parseDuration(t.duration)/3600;return s+(hrs*userRateForTask(t,state));},0);
   const totalProfit = totalRevenue - totalPayout;
@@ -340,7 +339,6 @@ function AdminBillingView({ state, setState }) {
         <div className="stat"><div className="v" style={{color:'#7c3aed'}}>${totalProfit.toFixed(2)}</div><div className="l">Total Profit</div></div>
         <div className="stat"><div className="v" style={{color:'#d97706'}}>{openTasks}</div><div className="l">Open Tasks</div></div>
       </div>
-
       <div className="card p20 mb16">
         <div className="section-title">Billing — Task Level</div>
         <div className="small mb16" style={{color:'#8492a6'}}>Review each task's revenue, payout, and profit</div>
@@ -355,61 +353,43 @@ function AdminBillingView({ state, setState }) {
           <button className="btn btn-soft" onClick={()=>exportToPDF(dailyRows,f,state)}>Export PDF</button>
         </div>
       </div>
-
       <div className="card p20">
         <div className="table-wrap">
           <table className="table">
-            <thead>
-              <tr>
-                <th>Date</th><th>User</th><th>Account</th><th>Project / Notes</th><th>Duration</th>
-                <th style={{color:'#0b6aa9'}}>Revenue</th>
-                <th style={{color:'#059669'}}>Payout</th>
-                <th style={{color:'#7c3aed'}}>Profit</th>
-                <th>Status</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Date</th><th>User</th><th>Account</th><th>Project / Notes</th><th>Duration</th><th style={{color:'#0b6aa9'}}>Revenue</th><th style={{color:'#059669'}}>Payout</th><th style={{color:'#7c3aed'}}>Profit</th><th>Status</th></tr></thead>
             <tbody>
               {!dailyRows.length && <tr><td colSpan="9" className="empty">No reviewed tasks in this period</td></tr>}
               {dailyRows.map(t=>{
-                const secs=parseDuration(t.duration); const hrs=secs/3600;
+                const secs=parseDuration(t.duration);const hrs=secs/3600;
                 const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};
-                const revenue=hrs*(acc.accountRate||0);
-                const payout=hrs*userRateForTask(t,state);
-                const profit=revenue-payout;
+                const revenue=hrs*(acc.accountRate||0);const payout=hrs*userRateForTask(t,state);
                 return (
                   <tr key={t.id} style={{opacity:t.paid?0.6:1}}>
                     <td><strong>{fmtDate(t.workDate)}</strong><br/><span className="small">{fmtUTC(t.submittedAt)}</span></td>
-                    <td>{t.userName}</td>
-                    <td>{t.account}</td>
-                    <td>{t.projectName||t.notes||'—'}</td>
+                    <td>{t.userName}</td><td>{t.account}</td><td>{t.projectName||t.notes||'—'}</td>
                     <td className="mono">{fmtDuration(secs)}</td>
                     <td style={{color:'#0b6aa9',fontWeight:700}}>${revenue.toFixed(2)}</td>
                     <td style={{color:'#059669',fontWeight:700}}>${payout.toFixed(2)}</td>
-                    <td style={{color:'#7c3aed',fontWeight:700}}>${profit.toFixed(2)}</td>
+                    <td style={{color:'#7c3aed',fontWeight:700}}>${(revenue-payout).toFixed(2)}</td>
                     <td>
                       <select className="select" value={t.paid?'paid':'open'} style={{minWidth:100}} onChange={async e=>{
                         const paid=e.target.value==='paid';
                         await updateDoc(doc(db,'tasks',t.id),{paid});
                         setState(prev=>({...prev,tasks:prev.tasks.map(x=>x.id===t.id?{...x,paid}:x)}));
-                      }}>
-                        <option value="open">Open</option>
-                        <option value="paid">Paid</option>
-                      </select>
+                      }}><option value="open">Open</option><option value="paid">Paid</option></select>
                     </td>
                   </tr>
                 );
               })}
             </tbody>
-            {dailyRows.length > 0 && (
-              <tfoot>
-                <tr style={{background:'#f8fafc',fontWeight:700}}>
-                  <td colSpan="5"><strong>Total ({dailyRows.length} tasks)</strong></td>
-                  <td style={{color:'#0b6aa9'}}><strong>${totalRevenue.toFixed(2)}</strong></td>
-                  <td style={{color:'#059669'}}><strong>${totalPayout.toFixed(2)}</strong></td>
-                  <td style={{color:'#7c3aed'}}><strong>${totalProfit.toFixed(2)}</strong></td>
-                  <td></td>
-                </tr>
-              </tfoot>
+            {dailyRows.length>0&&(
+              <tfoot><tr style={{background:'#f8fafc',fontWeight:700}}>
+                <td colSpan="5"><strong>Total ({dailyRows.length})</strong></td>
+                <td style={{color:'#0b6aa9'}}><strong>${totalRevenue.toFixed(2)}</strong></td>
+                <td style={{color:'#059669'}}><strong>${totalPayout.toFixed(2)}</strong></td>
+                <td style={{color:'#7c3aed'}}><strong>${totalProfit.toFixed(2)}</strong></td>
+                <td></td>
+              </tr></tfoot>
             )}
           </table>
         </div>
@@ -418,68 +398,92 @@ function AdminBillingView({ state, setState }) {
   );
 }
 
-// ── Payments: User-level summary with batches ──
+// ── Payments: Full weekly tracking with partial paid detection ──
 function AdminPaymentsView({ state, setState }) {
   const today = new Date().toISOString().slice(0,10);
   const [preset, setPreset] = useState('week');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all'); // all | pending | partial | fullypaid
   const [openBatch, setOpenBatch] = useState(null);
+  const [expandUser, setExpandUser] = useState(null);
   const [historyPage, setHistoryPage] = useState(1);
   const PAGE_SIZE = 15;
 
-  // Date range based on preset
   const getRange = () => {
     const now = new Date(today+'T00:00:00Z');
-    if(preset==='week') {
-      const wb = getWeekBounds(today);
-      return {from: wb.start, to: wb.end};
-    }
+    if(preset==='week') { const wb=getWeekBounds(today); return {from:wb.start,to:wb.end}; }
     if(preset==='month') {
-      const y=now.getUTCFullYear(), m=now.getUTCMonth();
+      const y=now.getUTCFullYear(),m=now.getUTCMonth();
       const from=`${y}-${String(m+1).padStart(2,'0')}-01`;
       const lastDay=new Date(Date.UTC(y,m+1,0)).getUTCDate();
-      const to=`${y}-${String(m+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
-      return {from,to};
+      return {from,to:`${y}-${String(m+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`};
     }
-    if(preset==='last30') {
-      const from=new Date(now.getTime()-29*86400000).toISOString().slice(0,10);
-      return {from, to:today};
-    }
-    return {from:customFrom, to:customTo};
+    if(preset==='last30') return {from:new Date(now.getTime()-29*86400000).toISOString().slice(0,10),to:today};
+    return {from:customFrom,to:customTo};
   };
 
-  const {from, to} = getRange();
-  const paidTasks = state.tasks.filter(t=>t.paid&&t.status==='reviewed');
-  const filteredPaid = paidTasks.filter(t=>within(t.workDate,from,to));
+  const {from,to} = getRange();
 
-  // Build user summary for selected period
-  const userSummary = {};
-  filteredPaid.forEach(t=>{
+  // All reviewed tasks in period
+  const periodTasks = state.tasks.filter(t=>t.status==='reviewed'&&within(t.workDate,from,to));
+
+  // Build user+week tracking map
+  const userWeekMap = {};
+  periodTasks.forEach(t=>{
+    const key = t.userId||t.userName;
+    if(!userWeekMap[key]) {
+      const usr=state.users.find(u=>u.id===t.userId)||{};
+      userWeekMap[key]={
+        userId:t.userId, userName:t.userName, binanceId:usr.binanceId||'—',
+        totalTasks:0, paidTasks:0, unpaidTasks:0,
+        totalPayout:0, paidPayout:0, remainingPayout:0,
+        totalRevenue:0, tasks:[]
+      };
+    }
     const hrs=parseDuration(t.duration)/3600;
     const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};
     const revenue=hrs*(acc.accountRate||0);
     const payout=hrs*userRateForTask(t,state);
-    const key=t.userId||t.userName;
-    if(!userSummary[key]){
-      const usr=state.users.find(u=>u.id===t.userId)||{};
-      userSummary[key]={userName:t.userName,binanceId:usr.binanceId||'—',tasks:0,revenue:0,payout:0,profit:0};
-    }
-    userSummary[key].tasks++;
-    userSummary[key].revenue+=revenue;
-    userSummary[key].payout+=payout;
-    userSummary[key].profit+=(revenue-payout);
+    userWeekMap[key].totalTasks++;
+    userWeekMap[key].totalRevenue+=revenue;
+    userWeekMap[key].totalPayout+=payout;
+    userWeekMap[key].tasks.push(t);
+    if(t.paid){ userWeekMap[key].paidTasks++; userWeekMap[key].paidPayout+=payout; }
+    else { userWeekMap[key].unpaidTasks++; userWeekMap[key].remainingPayout+=payout; }
   });
-  const userRows=Object.values(userSummary).sort((a,b)=>a.userName.localeCompare(b.userName));
 
-  // Summary cards
-  const totalRevenue=filteredPaid.reduce((s,t)=>{const hrs=parseDuration(t.duration)/3600;const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};return s+(hrs*(acc.accountRate||0));},0);
-  const totalPayout=filteredPaid.reduce((s,t)=>{const hrs=parseDuration(t.duration)/3600;return s+(hrs*userRateForTask(t,state));},0);
-  const totalProfit=totalRevenue-totalPayout;
+  const allUserRows = Object.values(userWeekMap).sort((a,b)=>a.userName.localeCompare(b.userName)).map(u=>({
+    ...u,
+    status: u.unpaidTasks===0 ? 'fully_paid' : u.paidTasks===0 ? 'has_pending' : 'partially_paid'
+  }));
 
-  // Build weekly batches from ALL paid tasks
+  // Apply filter
+  const userRows = allUserRows.filter(u=>{
+    if(filterStatus==='pending') return u.status==='has_pending';
+    if(filterStatus==='partial') return u.status==='partially_paid';
+    if(filterStatus==='fullypaid') return u.status==='fully_paid';
+    return true;
+  });
+
+  // Alert cards
+  const usersWithPending = allUserRows.filter(u=>u.status==='has_pending').length;
+  const partiallyPaid = allUserRows.filter(u=>u.status==='partially_paid').length;
+  const totalUnpaidTasks = allUserRows.reduce((s,u)=>s+u.unpaidTasks,0);
+  const totalRemaining = allUserRows.reduce((s,u)=>s+u.remainingPayout,0);
+
+  // Mark all unpaid tasks of a user as paid
+  const markAllPaid = async (u) => {
+    if(!confirm(`Mark all ${u.unpaidTasks} unpaid tasks for ${u.userName} as paid?`)) return;
+    const unpaid = u.tasks.filter(t=>!t.paid);
+    await Promise.all(unpaid.map(t=>updateDoc(doc(db,'tasks',t.id),{paid:true})));
+    setState(prev=>({...prev,tasks:prev.tasks.map(t=>unpaid.find(x=>x.id===t.id)?{...t,paid:true}:t)}));
+  };
+
+  // Batches (all time)
+  const paidTasksAll = state.tasks.filter(t=>t.paid&&t.status==='reviewed');
   const batchMap = {};
-  paidTasks.forEach(t=>{
+  paidTasksAll.forEach(t=>{
     const wb=getWeekBounds(t.workDate);
     const key=wb.start;
     if(!batchMap[key]) batchMap[key]={from:wb.start,to:wb.end,tasks:[],revenue:0,payout:0,profit:0};
@@ -494,79 +498,167 @@ function AdminPaymentsView({ state, setState }) {
   });
   const batches=Object.values(batchMap).sort((a,b)=>b.from.localeCompare(a.from));
 
-  // History pagination
-  const sortedHistory=[...filteredPaid].sort((a,b)=>new Date(b.workDate)-new Date(a.workDate));
+  // History
+  const paidInPeriod = periodTasks.filter(t=>t.paid);
+  const sortedHistory=[...paidInPeriod].sort((a,b)=>new Date(b.workDate)-new Date(a.workDate));
   const totalPages=Math.ceil(sortedHistory.length/PAGE_SIZE);
-  const pagedHistory=sortedHistory.slice((historyPage-1)*PAGE_SIZE, historyPage*PAGE_SIZE);
+  const pagedHistory=sortedHistory.slice((historyPage-1)*PAGE_SIZE,historyPage*PAGE_SIZE);
 
   return (
     <div>
+      {/* Alert Banner if there are pending/partial users */}
+      {(usersWithPending>0||partiallyPaid>0) && (
+        <div style={{padding:'14px 20px',borderRadius:12,border:'1px solid #fecaca',background:'#fef2f2',marginBottom:16,display:'flex',alignItems:'center',gap:12}}>
+          <span style={{fontSize:20}}>⚠️</span>
+          <div>
+            <div style={{fontWeight:700,color:'#dc2626',fontSize:15}}>Payment Attention Required</div>
+            <div style={{color:'#7f1d1d',fontSize:13,marginTop:2}}>
+              {usersWithPending>0&&<span>{usersWithPending} user(s) with no payment yet. </span>}
+              {partiallyPaid>0&&<span style={{color:'#b45309'}}>{partiallyPaid} user(s) partially paid — some tasks still open.</span>}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Period Selector */}
       <div className="card p20 mb16">
         <div className="row" style={{gap:8,flexWrap:'wrap',alignItems:'center'}}>
-          <span style={{fontWeight:600,fontSize:14,color:'#1a2332'}}>Period:</span>
+          <span style={{fontWeight:600,fontSize:14}}>Period:</span>
           {[['week','This Week'],['month','This Month'],['last30','Last 30 Days'],['custom','Custom']].map(([val,label])=>(
             <button key={val} className={`btn ${preset===val?'btn-primary':'btn-soft'}`} style={{minHeight:34,padding:'6px 14px',fontSize:13}} onClick={()=>{setPreset(val);setHistoryPage(1);}}>
               {label}
             </button>
           ))}
-          {preset==='custom' && (
+          {preset==='custom'&&(
             <>
-              <input className="input" type="date" value={customFrom} onChange={e=>{setCustomFrom(e.target.value);setHistoryPage(1);}} style={{width:150}} />
+              <input className="input" type="date" value={customFrom} onChange={e=>setCustomFrom(e.target.value)} style={{width:150}} />
               <span style={{color:'#8492a6'}}>→</span>
-              <input className="input" type="date" value={customTo} onChange={e=>{setCustomTo(e.target.value);setHistoryPage(1);}} style={{width:150}} />
+              <input className="input" type="date" value={customTo} onChange={e=>setCustomTo(e.target.value)} style={{width:150}} />
             </>
           )}
           {from&&to&&<span className="badge b-blue">{fmtDate(from)} → {fmtDate(to)}</span>}
         </div>
       </div>
 
-      {/* Summary Cards */}
+      {/* Alert Cards */}
       <div className="grid grid-4 mb16">
-        <div className="stat"><div className="v" style={{color:'#059669'}}>{filteredPaid.length}</div><div className="l">Paid Tasks</div></div>
-        <div className="stat"><div className="v" style={{color:'#0b6aa9'}}>${totalRevenue.toFixed(2)}</div><div className="l">Total Revenue</div></div>
-        <div className="stat"><div className="v" style={{color:'#059669'}}>${totalPayout.toFixed(2)}</div><div className="l">Total Payout</div></div>
-        <div className="stat"><div className="v" style={{color:'#7c3aed'}}>${totalProfit.toFixed(2)}</div><div className="l">Total Profit</div></div>
+        <div className="stat" style={{borderColor:usersWithPending>0?'#fecaca':'var(--line)',background:usersWithPending>0?'#fef2f2':'#fff'}}>
+          <div className="v" style={{color:'#dc2626'}}>{usersWithPending}</div>
+          <div className="l">Users With Pending</div>
+        </div>
+        <div className="stat" style={{borderColor:partiallyPaid>0?'#fde68a':'var(--line)',background:partiallyPaid>0?'#fffbeb':'#fff'}}>
+          <div className="v" style={{color:'#d97706'}}>{partiallyPaid}</div>
+          <div className="l">Partially Paid Users</div>
+        </div>
+        <div className="stat" style={{borderColor:totalUnpaidTasks>0?'#fecaca':'var(--line)'}}>
+          <div className="v" style={{color:'#dc2626'}}>{totalUnpaidTasks}</div>
+          <div className="l">Unpaid Tasks</div>
+        </div>
+        <div className="stat" style={{borderColor:totalRemaining>0?'#fecaca':'var(--line)'}}>
+          <div className="v" style={{color:'#dc2626'}}>${totalRemaining.toFixed(2)}</div>
+          <div className="l">Remaining Payout</div>
+        </div>
       </div>
 
-      {/* User Summary */}
+      {/* User Payment Status Table */}
       <div className="card p20 mb16">
-        <div className="section-title">Summary by User</div>
-        <div className="small mb16" style={{color:'#8492a6'}}>Paid tasks within the selected period</div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,flexWrap:'wrap',gap:10}}>
+          <div>
+            <div className="section-title" style={{margin:0}}>Weekly Payment Status — Per User</div>
+            <div className="small mt16" style={{color:'#8492a6',marginTop:4}}>Tracks paid vs unpaid tasks per user in the selected period</div>
+          </div>
+          <div className="row" style={{gap:6}}>
+            {[['all','All'],['pending','Has Pending'],['partial','Partially Paid'],['fullypaid','Fully Paid']].map(([val,label])=>(
+              <button key={val} className={`btn ${filterStatus===val?'btn-primary':'btn-soft'}`} style={{minHeight:32,padding:'4px 12px',fontSize:12}} onClick={()=>setFilterStatus(val)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="table-wrap">
           <table className="table">
             <thead>
               <tr>
-                <th>User</th><th>Binance ID</th><th>Tasks</th>
-                <th style={{color:'#0b6aa9'}}>Revenue</th>
-                <th style={{color:'#059669'}}>Payout</th>
-                <th style={{color:'#7c3aed'}}>Profit</th>
+                <th>User</th>
+                <th>Binance ID</th>
+                <th>Total Tasks</th>
+                <th style={{color:'#059669'}}>Paid Tasks</th>
+                <th style={{color:'#dc2626'}}>Unpaid Tasks</th>
+                <th style={{color:'#059669'}}>Total Payout</th>
+                <th style={{color:'#059669'}}>Paid Payout</th>
+                <th style={{color:'#dc2626'}}>Remaining</th>
+                <th>Status</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {!userRows.length&&<tr><td colSpan="6" className="empty">No paid tasks in this period</td></tr>}
+              {!userRows.length&&<tr><td colSpan="10" className="empty">No users match this filter</td></tr>}
               {userRows.map(u=>(
-                <tr key={u.userName}>
-                  <td><strong>{u.userName}</strong></td>
-                  <td className="mono">{u.binanceId}</td>
-                  <td>{u.tasks}</td>
-                  <td style={{color:'#0b6aa9',fontWeight:700}}>${u.revenue.toFixed(2)}</td>
-                  <td style={{color:'#059669',fontWeight:700}}>${u.payout.toFixed(2)}</td>
-                  <td style={{color:'#7c3aed',fontWeight:700}}>${u.profit.toFixed(2)}</td>
-                </tr>
+                <>
+                  <tr key={u.userName} style={{background: u.status==='partially_paid'?'#fffbeb':u.status==='has_pending'?'#fef2f2':''}}>
+                    <td><strong>{u.userName}</strong></td>
+                    <td className="mono">{u.binanceId}</td>
+                    <td>{u.totalTasks}</td>
+                    <td style={{color:'#059669',fontWeight:600}}>{u.paidTasks}</td>
+                    <td style={{color:u.unpaidTasks>0?'#dc2626':'#059669',fontWeight:700}}>{u.unpaidTasks}</td>
+                    <td style={{color:'#059669',fontWeight:600}}>${u.totalPayout.toFixed(2)}</td>
+                    <td style={{color:'#059669',fontWeight:600}}>${u.paidPayout.toFixed(2)}</td>
+                    <td style={{color:u.remainingPayout>0?'#dc2626':'#059669',fontWeight:700}}>
+                      {u.remainingPayout>0?`$${u.remainingPayout.toFixed(2)}`:'✓'}
+                    </td>
+                    <td>
+                      {u.status==='fully_paid' && <span className="badge b-green">✓ Fully Paid</span>}
+                      {u.status==='partially_paid' && <span className="badge b-yellow">⚠ Partially Paid</span>}
+                      {u.status==='has_pending' && <span className="badge b-red">✗ Has Pending</span>}
+                    </td>
+                    <td>
+                      <div className="row" style={{gap:6}}>
+                        <button className="btn btn-soft" style={{minHeight:30,padding:'4px 10px',fontSize:12}} onClick={()=>setExpandUser(expandUser===u.userName?null:u.userName)}>
+                          {expandUser===u.userName?'Hide':'View Tasks'}
+                        </button>
+                        {u.unpaidTasks>0&&(
+                          <button className="btn btn-green" style={{minHeight:30,padding:'4px 10px',fontSize:12}} onClick={()=>markAllPaid(u)}>
+                            Mark All Paid
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  {expandUser===u.userName&&(
+                    <tr key={u.userName+'_expand'}>
+                      <td colSpan="10" style={{padding:0,background:'#f8fafc'}}>
+                        <table className="table" style={{margin:0}}>
+                          <thead><tr><th>Date</th><th>Account</th><th>Project</th><th>Duration</th><th style={{color:'#059669'}}>Payout</th><th>Payment Status</th></tr></thead>
+                          <tbody>
+                            {u.tasks.sort((a,b)=>new Date(b.workDate)-new Date(a.workDate)).map(t=>{
+                              const hrs=parseDuration(t.duration)/3600;
+                              const payout=hrs*userRateForTask(t,state);
+                              return(
+                                <tr key={t.id} style={{background:t.paid?'':'#fff8f8'}}>
+                                  <td>{fmtDate(t.workDate)}</td>
+                                  <td>{t.account}</td>
+                                  <td>{t.projectName||'—'}</td>
+                                  <td className="mono">{fmtDurationFromInput(t.duration)}</td>
+                                  <td style={{color:'#059669',fontWeight:600}}>${payout.toFixed(2)}</td>
+                                  <td>
+                                    <select className="select" value={t.paid?'paid':'open'} style={{minWidth:90}} onChange={async e=>{
+                                      const paid=e.target.value==='paid';
+                                      await updateDoc(doc(db,'tasks',t.id),{paid});
+                                      setState(prev=>({...prev,tasks:prev.tasks.map(x=>x.id===t.id?{...x,paid}:x)}));
+                                    }}><option value="open">Open</option><option value="paid">Paid</option></select>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  )}
+                </>
               ))}
             </tbody>
-            {userRows.length>0&&(
-              <tfoot>
-                <tr style={{background:'#f8fafc',fontWeight:700}}>
-                  <td colSpan="2"><strong>Total</strong></td>
-                  <td><strong>{filteredPaid.length}</strong></td>
-                  <td style={{color:'#0b6aa9'}}><strong>${totalRevenue.toFixed(2)}</strong></td>
-                  <td style={{color:'#059669'}}><strong>${totalPayout.toFixed(2)}</strong></td>
-                  <td style={{color:'#7c3aed'}}><strong>${totalProfit.toFixed(2)}</strong></td>
-                </tr>
-              </tfoot>
-            )}
           </table>
         </div>
       </div>
@@ -578,10 +670,7 @@ function AdminPaymentsView({ state, setState }) {
         {!batches.length&&<div className="empty">No paid tasks yet</div>}
         {batches.map(batch=>(
           <div key={batch.from} style={{border:'1px solid var(--line)',borderRadius:10,marginBottom:10,overflow:'hidden'}}>
-            <div
-              style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 16px',background:'#f8fafc',cursor:'pointer'}}
-              onClick={()=>setOpenBatch(openBatch===batch.from?null:batch.from)}
-            >
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 16px',background:'#f8fafc',cursor:'pointer'}} onClick={()=>setOpenBatch(openBatch===batch.from?null:batch.from)}>
               <div style={{display:'flex',alignItems:'center',gap:12}}>
                 <span style={{fontWeight:700,fontSize:14}}>{fmtDate(batch.from)} → {fmtDate(batch.to)}</span>
                 <span className="badge">{batch.tasks.length} tasks</span>
@@ -601,20 +690,8 @@ function AdminPaymentsView({ state, setState }) {
                     {batch.tasks.sort((a,b)=>new Date(b.workDate)-new Date(a.workDate)).map(t=>{
                       const secs=parseDuration(t.duration);const hrs=secs/3600;
                       const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};
-                      const revenue=hrs*(acc.accountRate||0);
-                      const payout=hrs*userRateForTask(t,state);
-                      return(
-                        <tr key={t.id}>
-                          <td><strong>{fmtDate(t.workDate)}</strong></td>
-                          <td>{t.userName}</td>
-                          <td>{t.account}</td>
-                          <td>{t.projectName||'—'}</td>
-                          <td className="mono">{fmtDuration(secs)}</td>
-                          <td style={{color:'#0b6aa9',fontWeight:700}}>${revenue.toFixed(2)}</td>
-                          <td style={{color:'#059669',fontWeight:700}}>${payout.toFixed(2)}</td>
-                          <td style={{color:'#7c3aed',fontWeight:700}}>${(revenue-payout).toFixed(2)}</td>
-                        </tr>
-                      );
+                      const revenue=hrs*(acc.accountRate||0);const payout=hrs*userRateForTask(t,state);
+                      return(<tr key={t.id}><td><strong>{fmtDate(t.workDate)}</strong></td><td>{t.userName}</td><td>{t.account}</td><td>{t.projectName||'—'}</td><td className="mono">{fmtDuration(secs)}</td><td style={{color:'#0b6aa9',fontWeight:700}}>${revenue.toFixed(2)}</td><td style={{color:'#059669',fontWeight:700}}>${payout.toFixed(2)}</td><td style={{color:'#7c3aed',fontWeight:700}}>${(revenue-payout).toFixed(2)}</td></tr>);
                     })}
                   </tbody>
                 </table>
@@ -627,38 +704,18 @@ function AdminPaymentsView({ state, setState }) {
       {/* History with Pagination */}
       <div className="card p20">
         <div className="section-title">Paid Tasks History</div>
-        <div className="small mb16" style={{color:'#8492a6'}}>Detailed list for the selected period — {sortedHistory.length} tasks total</div>
+        <div className="small mb16" style={{color:'#8492a6'}}>Paid tasks in the selected period — {sortedHistory.length} total</div>
         <div className="table-wrap">
           <table className="table">
-            <thead>
-              <tr>
-                <th>Date</th><th>User</th><th>Binance ID</th><th>Account</th><th>Project</th><th>Duration</th>
-                <th style={{color:'#0b6aa9'}}>Revenue</th>
-                <th style={{color:'#059669'}}>Payout</th>
-                <th style={{color:'#7c3aed'}}>Profit</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Date</th><th>User</th><th>Binance ID</th><th>Account</th><th>Project</th><th>Duration</th><th style={{color:'#0b6aa9'}}>Revenue</th><th style={{color:'#059669'}}>Payout</th><th style={{color:'#7c3aed'}}>Profit</th></tr></thead>
             <tbody>
               {!pagedHistory.length&&<tr><td colSpan="9" className="empty">No paid tasks in this period</td></tr>}
               {pagedHistory.map(t=>{
                 const secs=parseDuration(t.duration);const hrs=secs/3600;
                 const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};
-                const revenue=hrs*(acc.accountRate||0);
-                const payout=hrs*userRateForTask(t,state);
+                const revenue=hrs*(acc.accountRate||0);const payout=hrs*userRateForTask(t,state);
                 const usr=state.users.find(u=>u.id===t.userId)||{};
-                return(
-                  <tr key={t.id}>
-                    <td><strong>{fmtDate(t.workDate)}</strong></td>
-                    <td>{t.userName}</td>
-                    <td className="mono">{usr.binanceId||'—'}</td>
-                    <td>{t.account}</td>
-                    <td>{t.projectName||'—'}</td>
-                    <td className="mono">{fmtDuration(secs)}</td>
-                    <td style={{color:'#0b6aa9',fontWeight:700}}>${revenue.toFixed(2)}</td>
-                    <td style={{color:'#059669',fontWeight:700}}>${payout.toFixed(2)}</td>
-                    <td style={{color:'#7c3aed',fontWeight:700}}>${(revenue-payout).toFixed(2)}</td>
-                  </tr>
-                );
+                return(<tr key={t.id}><td><strong>{fmtDate(t.workDate)}</strong></td><td>{t.userName}</td><td className="mono">{usr.binanceId||'—'}</td><td>{t.account}</td><td>{t.projectName||'—'}</td><td className="mono">{fmtDuration(secs)}</td><td style={{color:'#0b6aa9',fontWeight:700}}>${revenue.toFixed(2)}</td><td style={{color:'#059669',fontWeight:700}}>${payout.toFixed(2)}</td><td style={{color:'#7c3aed',fontWeight:700}}>${(revenue-payout).toFixed(2)}</td></tr>);
               })}
             </tbody>
           </table>
@@ -700,9 +757,7 @@ function AdminAccountsView({ state, setState }) {
               {activeSess&&(
                 <div className="info-box mb12" style={{borderColor:'#bfdbfe',background:'#eff6ff'}}>
                   <div className="kv"><span style={{fontSize:12,color:'#2563eb',fontWeight:600}}>👤 Active user</span><span className="mono" style={{color:'#1a2332',fontWeight:700}}>{activeUser?.name}</span></div>
-                  <div className="row mt16" style={{justifyContent:'flex-end'}}>
-                    <button className="btn btn-red" style={{fontSize:12,minHeight:32,padding:'6px 12px'}} onClick={()=>logoutAccount(acc.id,setState,state)}>Force Logout</button>
-                  </div>
+                  <div className="row mt16" style={{justifyContent:'flex-end'}}><button className="btn btn-red" style={{fontSize:12,minHeight:32,padding:'6px 12px'}} onClick={()=>logoutAccount(acc.id,setState,state)}>Force Logout</button></div>
                 </div>
               )}
               <div className="info-box mb12">
@@ -752,16 +807,7 @@ function AdminSettingsView({ state, setState }) {
             <thead><tr><th>Project</th><th>Payout Rate</th><th>Action</th></tr></thead>
             <tbody>
               {!state.projects.length&&<tr><td colSpan="3" className="empty">No projects yet</td></tr>}
-              {state.projects.map(p=>(
-                <tr key={p.id}>
-                  <td><strong>{p.name}</strong></td>
-                  <td className="mono">${Number(p.userRate||0).toFixed(2)}/hr</td>
-                  <td>
-                    <button className="btn btn-soft" style={{minHeight:32,padding:'4px 10px',fontSize:12}} onClick={()=>setModal(p)}>Edit</button>
-                    <button className="btn btn-red" style={{minHeight:32,padding:'4px 10px',fontSize:12}} onClick={()=>deleteProject(p,setState)}>Delete</button>
-                  </td>
-                </tr>
-              ))}
+              {state.projects.map(p=>(<tr key={p.id}><td><strong>{p.name}</strong></td><td className="mono">${Number(p.userRate||0).toFixed(2)}/hr</td><td><button className="btn btn-soft" style={{minHeight:32,padding:'4px 10px',fontSize:12}} onClick={()=>setModal(p)}>Edit</button><button className="btn btn-red" style={{minHeight:32,padding:'4px 10px',fontSize:12}} onClick={()=>deleteProject(p,setState)}>Delete</button></td></tr>))}
             </tbody>
           </table>
         </div>
@@ -943,7 +989,7 @@ async function deleteProject(p,setState){if(!confirm('Delete project?'))return;a
 function exportToExcel(filtered,f,state){
   if(!filtered.length)return alert('No data to export');
   if(typeof XLSX==='undefined')return alert('XLSX library not loaded');
-  const rows=filtered.map(t=>{const secs=parseDuration(t.duration);const hrs=secs/3600;const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};const usr=state.users.find(u=>u.id===t.userId)||{};const payout=hrs*userRateForTask(t,state);const revenue=hrs*(acc.accountRate||0);return{'Date':fmtDate(t.workDate),'User':t.userName,'Binance ID':usr.binanceId||'—','Account':t.account,'Project':t.projectName||'—','Duration':fmtDuration(secs),'Hours':hrs.toFixed(2),'Revenue $':revenue.toFixed(2),'Payout $':payout.toFixed(2),'Profit $':(revenue-payout).toFixed(2),'Status':t.paid?'Paid':'Open'};});
+  const rows=filtered.map(t=>{const secs=parseDuration(t.duration);const hrs=secs/3600;const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};const usr=state.users.find(u=>u.id===t.userId)||{};const payout=hrs*userRateForTask(t,state);const revenue=hrs*(acc.accountRate||0);return{'Date':fmtDate(t.workDate),'User':t.userName,'Binance ID':usr.binanceId||'—','Account':t.account,'Project':t.projectName||'—','Duration':fmtDuration(secs),'Revenue $':revenue.toFixed(2),'Payout $':payout.toFixed(2),'Profit $':(revenue-payout).toFixed(2),'Status':t.paid?'Paid':'Open'};});
   const ws=XLSX.utils.json_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Billing');XLSX.writeFile(wb,`TeamUP_Billing_${f.from||'all'}_${f.to||'all'}.xlsx`);
 }
 
@@ -953,6 +999,6 @@ function exportToPDF(filtered,f,state){
   const totalRevenue=filtered.reduce((s,t)=>{const hrs=parseDuration(t.duration)/3600;const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};return s+(hrs*(acc.accountRate||0));},0);
   const totalPayout=filtered.reduce((s,t)=>{const hrs=parseDuration(t.duration)/3600;return s+(hrs*userRateForTask(t,state));},0);
   const rows=filtered.map(t=>{const secs=parseDuration(t.duration);const hrs=secs/3600;const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};const payout=hrs*userRateForTask(t,state);const revenue=hrs*(acc.accountRate||0);return`<tr><td>${fmtDate(t.workDate)}</td><td>${t.userName}</td><td>${t.account}</td><td>${t.projectName||'—'}</td><td>${fmtDuration(secs)}</td><td>$${revenue.toFixed(2)}</td><td>$${payout.toFixed(2)}</td><td>$${(revenue-payout).toFixed(2)}</td></tr>`;}).join('');
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>TeamUP Billing</title><style>body{font-family:Arial,sans-serif;padding:20px}table{width:100%;border-collapse:collapse;font-size:13px}th{background:#f8fafc;padding:10px 8px;text-align:left;border-bottom:2px solid #e4e9f0;font-weight:600}td{padding:10px 8px;border-bottom:1px solid #f1f5f9}.total{margin-top:20px;text-align:right}@media print{button{display:none}}</style></head><body><h1>TeamUP Billing</h1><p>${f.from||'All'} → ${f.to||'All'}</p><table><thead><tr><th>Date</th><th>User</th><th>Account</th><th>Project</th><th>Duration</th><th>Revenue</th><th>Payout</th><th>Profit</th></tr></thead><tbody>${rows}</tbody></table><div class="total">Revenue: <strong>$${totalRevenue.toFixed(2)}</strong> &nbsp; Payout: <strong>$${totalPayout.toFixed(2)}</strong> &nbsp; Profit: <strong>$${(totalRevenue-totalPayout).toFixed(2)}</strong></div><br><button onclick="window.print()">Print / PDF</button></body></html>`);
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>TeamUP Billing</title><style>body{font-family:Arial,sans-serif;padding:20px}table{width:100%;border-collapse:collapse;font-size:13px}th{background:#f8fafc;padding:10px 8px;text-align:left;border-bottom:2px solid #e4e9f0;font-weight:600}td{padding:10px 8px;border-bottom:1px solid #f1f5f9}.total{margin-top:20px;text-align:right}@media print{button{display:none}}</style></head><body><h1>TeamUP Billing</h1><p>${f.from||'All'} → ${f.to||'All'}</p><table><thead><tr><th>Date</th><th>User</th><th>Account</th><th>Project</th><th>Duration</th><th>Revenue</th><th>Payout</th><th>Profit</th></tr></thead><tbody>${rows}</tbody></table><div class="total">Revenue: <strong>$${totalRevenue.toFixed(2)}</strong> Payout: <strong>$${totalPayout.toFixed(2)}</strong> Profit: <strong>$${(totalRevenue-totalPayout).toFixed(2)}</strong></div><br><button onclick="window.print()">Print</button></body></html>`);
   win.document.close();
 }

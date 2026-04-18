@@ -1,10 +1,10 @@
 function AdminPaymentsView({ state }) {
   const paidTasks = state.tasks
-    .filter(t => t.paid && t.status === 'reviewed')
+    .filter((t) => t.paid && t.status === 'reviewed')
     .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
 
   const byUser = {};
-  paidTasks.forEach(t => {
+  paidTasks.forEach((t) => {
     const secs = parseDuration(t.duration);
     const hrs = secs / 3600;
 
@@ -19,7 +19,8 @@ function AdminPaymentsView({ state }) {
       };
     }
 
-    const acc = state.accounts.find(a => `Account ${a.number}` === t.account) || {};
+    const acc =
+      state.accounts.find((a) => `Account ${a.number}` === t.account) || {};
     const revenue = hrs * (acc.accountRate || 0);
     const payout = hrs * userRateForTask(t, state);
     const profit = revenue - payout;
@@ -34,12 +35,12 @@ function AdminPaymentsView({ state }) {
     a.userName.localeCompare(b.userName)
   );
 
-  const totalRevenue = usersRows.reduce((s, r) => s + r.revenue, 0);
-  const totalPayout = usersRows.reduce((s, r) => s + r.payout, 0);
-  const totalProfit = usersRows.reduce((s, r) => s + r.profit, 0);
+  const totalRevenue = usersRows.reduce((sum, row) => sum + row.revenue, 0);
+  const totalPayout = usersRows.reduce((sum, row) => sum + row.payout, 0);
+  const totalProfit = usersRows.reduce((sum, row) => sum + row.profit, 0);
 
   const batchesMap = {};
-  paidTasks.forEach(t => {
+  paidTasks.forEach((t) => {
     const wb = getWeekBounds(t.workDate);
 
     if (!batchesMap[wb.start]) {
@@ -55,7 +56,8 @@ function AdminPaymentsView({ state }) {
 
     const secs = parseDuration(t.duration);
     const hrs = secs / 3600;
-    const acc = state.accounts.find(a => `Account ${a.number}` === t.account) || {};
+    const acc =
+      state.accounts.find((a) => `Account ${a.number}` === t.account) || {};
     const revenue = hrs * (acc.accountRate || 0);
     const payout = hrs * userRateForTask(t, state);
     const profit = revenue - payout;
@@ -135,9 +137,9 @@ function AdminPaymentsView({ state }) {
                 </tr>
               </thead>
               <tbody>
-                {usersRows.map(row => {
+                {usersRows.map((row) => {
                   const user =
-                    state.users.find(x => x.id === row.userId) || {
+                    state.users.find((x) => x.id === row.userId) || {
                       name: row.userName,
                       binanceId: '—',
                     };
@@ -147,13 +149,13 @@ function AdminPaymentsView({ state }) {
                       <td className="px-3 py-3 font-medium">{user.name}</td>
                       <td className="px-3 py-3">{user.binanceId || '—'}</td>
                       <td className="px-3 py-3">{row.tasksCount}</td>
-                      <td className="px-3 py-3 text-blue-600 font-medium">
+                      <td className="px-3 py-3 font-medium text-blue-600">
                         ${row.revenue.toFixed(2)}
                       </td>
-                      <td className="px-3 py-3 text-amber-600 font-medium">
+                      <td className="px-3 py-3 font-medium text-amber-600">
                         ${row.payout.toFixed(2)}
                       </td>
-                      <td className="px-3 py-3 text-green-600 font-medium">
+                      <td className="px-3 py-3 font-medium text-green-600">
                         ${row.profit.toFixed(2)}
                       </td>
                     </tr>
@@ -179,17 +181,18 @@ function AdminPaymentsView({ state }) {
           </div>
         ) : (
           <div className="space-y-3">
-            {batchRows.map(batch => (
+            {batchRows.map((batch) => (
               <div
                 key={batch.start}
-                className="rounded-xl border p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
+                className="flex flex-col gap-3 rounded-xl border p-4 md:flex-row md:items-center md:justify-between"
               >
                 <div>
                   <div className="font-semibold">
                     {fmtDate(batch.start)} → {fmtDate(batch.end)}
                   </div>
                   <div className="text-sm text-gray-500">
-                    {batch.tasksCount} paid task{batch.tasksCount !== 1 ? 's' : ''}
+                    {batch.tasksCount} paid task
+                    {batch.tasksCount !== 1 ? 's' : ''}
                   </div>
                 </div>
 

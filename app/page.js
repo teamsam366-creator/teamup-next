@@ -325,7 +325,7 @@ function AdminTasksView({ state, setState }) {
 function AdminBillingView({ state, setState }) {
   const today = new Date().toISOString().slice(0,10);
   const wb = getWeekBounds(today);
-  const [f, setF] = useState({user:'all',account:'all',from:wb.start,to:wb.end});
+  const [f, setF] = useState({user:'all',account:'all',from:wb.start,to:wb.end,payStatus:'all'});
   const names = ['all',...state.users.map(u=>u.name)];
   const accounts = ['all',...state.accounts.map(a=>`Account ${a.number}`)];
 
@@ -333,7 +333,8 @@ function AdminBillingView({ state, setState }) {
     t.status==='reviewed' &&
     within(t.workDate,f.from,f.to) &&
     (f.user==='all'||t.userName===f.user) &&
-    (f.account==='all'||t.account===f.account)
+    (f.account==='all'||t.account===f.account) &&
+    (f.payStatus==='all'||(f.payStatus==='paid'?t.paid:!t.paid))
   );
   const dailyRows = [...reviewedTasks].sort((a,b)=>new Date(b.submittedAt)-new Date(a.submittedAt));
   const totalRevenue = dailyRows.reduce((s,t)=>{const hrs=parseDuration(t.duration)/3600;const acc=state.accounts.find(a=>`Account ${a.number}`===t.account)||{};return s+(hrs*(acc.accountRate||0));},0);
@@ -355,6 +356,14 @@ function AdminBillingView({ state, setState }) {
           <div className="field"><label className="label">Account</label><select className="select" value={f.account} onChange={e=>setF({...f,account:e.target.value})}>{accounts.map(n=><option key={n}>{n}</option>)}</select></div>
           <div className="field"><label className="label">From</label><input className="input" type="date" value={f.from} onChange={e=>setF({...f,from:e.target.value})} /></div>
           <div className="field"><label className="label">To</label><input className="input" type="date" value={f.to} onChange={e=>setF({...f,to:e.target.value})} /></div>
+        </div>
+        <div className="row mt16" style={{gap:8,alignItems:'center'}}>
+          <span style={{fontWeight:600,fontSize:13,color:'#8492a6'}}>Payment:</span>
+          {[['all','All'],['open','Open'],['paid','Paid']].map(([val,label])=>(
+            <button key={val} className={`btn ${f.payStatus===val?'btn-primary':'btn-soft'}`} style={{minHeight:32,padding:'4px 14px',fontSize:13}} onClick={()=>setF({...f,payStatus:val})}>
+              {label}
+            </button>
+          ))}
         </div>
         <div className="row mt16" style={{gap:10}}>
           <button className="btn btn-soft" onClick={()=>exportToExcel(dailyRows,f,state)}>Export Excel</button>
@@ -442,14 +451,6 @@ function AdminPaymentsView({ state, setState }) {
 
   return (
     <div>
-      {/* Summary Cards */}
-      <div className="grid grid-4 mb16">
-        <div className="stat"><div className="v" style={{color:'#1a2332'}}>{allPaidTasks.length}</div><div className="l">Paid Tasks</div></div>
-        <div className="stat"><div className="v" style={{color:'#0b6aa9'}}>${totalRevenue.toFixed(2)}</div><div className="l">Total Revenue</div></div>
-        <div className="stat"><div className="v" style={{color:'#d97706'}}>${totalPayout.toFixed(2)}</div><div className="l">Total Payout</div></div>
-        <div className="stat"><div className="v" style={{color:'#059669'}}>${totalProfit.toFixed(2)}</div><div className="l">Total Profit</div></div>
-      </div>
-
       {/* Payment Batches — All Time */}
       <div className="card p20">
         <div className="section-title">Payment Batches — All Time</div>

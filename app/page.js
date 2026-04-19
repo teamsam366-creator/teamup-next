@@ -560,10 +560,10 @@ function AdminUsersView({ state, setState }) {
     <div>
       <div className="card table-wrap">
         <table className="table">
-          <thead><tr><th>Name</th><th>Email</th><th>Binance ID</th><th>Action</th></tr></thead>
+          <thead><tr><th>Name</th><th>Email</th><th>Binance ID</th><th>Notes</th><th>Action</th></tr></thead>
           <tbody>
-            {!state.users.length&&<tr><td colSpan="4" className="empty">No users</td></tr>}
-            {state.users.map(u=>(<tr key={u.id}><td><strong>{u.name}</strong></td><td>{u.email}</td><td className="mono">{u.binanceId||'—'}</td><td><button className="btn btn-soft" onClick={()=>setModal(u)}>Edit</button></td></tr>))}
+            {!state.users.length&&<tr><td colSpan="5" className="empty">No users</td></tr>}
+            {state.users.map(u=>(<tr key={u.id}><td><strong>{u.name}</strong></td><td>{u.email}</td><td className="mono">{u.binanceId||'—'}</td><td style={{color:'#8492a6',fontSize:13}}>{u.notes||'—'}</td><td><button className="btn btn-soft" onClick={()=>setModal(u)}>Edit</button></td></tr>))}
           </tbody>
         </table>
       </div>
@@ -723,7 +723,7 @@ function ProjectModal({ project, setState, onClose }) {
 
 function UserModal({ user, state, setState, onClose }) {
   const isEdit=!!user;
-  const [form, setForm]=useState({name:user?.name||'',email:user?.email||'',binanceId:user?.binanceId||''});
+  const [form, setForm]=useState({name:user?.name||'',email:user?.email||'',binanceId:user?.binanceId||'',notes:user?.notes||''});
   const save=async()=>{
     if(!form.name||!form.email) return alert('Name and email are required');
     const id=isEdit?user.id:'id_'+Math.random().toString(36).slice(2,10);
@@ -740,6 +740,7 @@ function UserModal({ user, state, setState, onClose }) {
           <div className="field"><label className="label">Name</label><input className="input" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} /></div>
           <div className="field"><label className="label">Email</label><input className="input" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
           <div className="field" style={{gridColumn:'1/-1'}}><label className="label">Binance ID</label><input className="input" value={form.binanceId} onChange={e=>setForm({...form,binanceId:e.target.value})} /></div>
+          <div className="field" style={{gridColumn:'1/-1'}}><label className="label">Notes</label><textarea className="textarea" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Any notes about this user..." /></div>
         </div>
         <div className="small mt16" style={{color:'#8492a6'}}>⚠️ Password is managed from Firebase Console</div>
         <div className="row mt16"><button className="btn btn-primary" onClick={save}>Save</button></div>

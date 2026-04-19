@@ -288,12 +288,17 @@ function UserTasksTab({ myTasks, user, state, setState }) {
 }
 
 // ── Admin Tasks ──
+const PAGE_SIZE = 20;
 function AdminTasksView({ state, setState }) {
   const [modal, setModal] = useState(null);
+  const [page, setPage] = useState(0);
   const items = state.tasks.filter(t=>!t.paid).sort((a,b)=>{
     const p={pending:0,revision:1,rejected:2,reviewed:3};
     return (p[a.status]??99)-(p[b.status]??99)||new Date(b.submittedAt)-new Date(a.submittedAt);
   });
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages - 1);
+  const pageItems = items.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
   return (
     <div>
       <div className="card table-wrap">
@@ -301,7 +306,7 @@ function AdminTasksView({ state, setState }) {
           <thead><tr><th>Work Date</th><th>User</th><th>Platform</th><th>Duration</th><th>Account</th><th>Project</th><th>Payout Rate</th><th>Notes</th><th>Status</th><th>Action</th></tr></thead>
           <tbody>
             {!items.length && <tr><td colSpan="10" className="empty">No logs</td></tr>}
-            {items.map(t=>(
+            {pageItems.map(t=>(
               <tr key={t.id}>
                 <td><strong>{fmtDate(t.workDate)}</strong><br/><span className="small">{fmtUTC(t.submittedAt)}</span></td>
                 <td>{t.userName}</td><td>{t.platform}</td>
@@ -316,6 +321,13 @@ function AdminTasksView({ state, setState }) {
           </tbody>
         </table>
       </div>
+      {totalPages > 1 && (
+        <div className="row mt12" style={{justifyContent:'center',alignItems:'center',gap:12}}>
+          <button className="btn btn-soft" onClick={()=>setPage(p=>Math.max(0,p-1))} disabled={currentPage===0}>← Prev</button>
+          <span style={{fontSize:13,color:'#8492a6'}}>Page {currentPage+1} of {totalPages} &nbsp;·&nbsp; {items.length} tasks</span>
+          <button className="btn btn-soft" onClick={()=>setPage(p=>Math.min(totalPages-1,p+1))} disabled={currentPage===totalPages-1}>Next →</button>
+        </div>
+      )}
       {modal && <ReviewModal task={modal} onClose={()=>setModal(null)} setState={setState} state={state} />}
     </div>
   );

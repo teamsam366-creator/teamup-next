@@ -551,6 +551,12 @@ function AdminAccountsView({ state, setState }) {
                 <div className="kv"><strong>Today</strong><span className="mono">{used.toFixed(2)}h / {(acc.maxHours||10).toFixed(2)}h</span></div>
                 <div className="progress"><div className="bar" style={{width:`${Math.min(100,(used/(acc.maxHours||10))*100)}%`}}></div></div>
               </div>
+              {acc.adminNotes&&(
+                <div className="info-box mb12" style={{borderColor:'#fde68a',background:'#fffbeb'}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'#d97706',textTransform:'uppercase',letterSpacing:'.4px',marginBottom:4}}>Admin Notes</div>
+                  <div style={{fontSize:13,color:'#92400e'}}>{acc.adminNotes}</div>
+                </div>
+              )}
               <div className="row">
                 <button className="btn btn-soft" onClick={()=>setModal(acc)}>Edit</button>
                 <button className={`btn ${acc.accountStatus==='paused'?'btn-green':'btn-yellow'}`} onClick={()=>toggleAccountStatus(acc,setState)}>{acc.accountStatus==='paused'?'Start':'Stop'}</button>
